@@ -2,7 +2,7 @@ const express = require('express');
 const Cocktail = require('../models/Cocktail');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { validateCocktail } = require('../middleware/validation');
-const { upload, uploadToCloudinary } = require('../middleware/upload');
+const { upload, uploadToCloudinary, uploadMultipleToCloudinary } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -33,15 +33,31 @@ const router = express.Router();
  *           type: number
  *           description: The cocktail price in NGN
  *           minimum: 0
+ *         images:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               public_id:
+ *                 type: string
+ *                 description: Cloudinary public ID
+ *               url:
+ *                 type: string
+ *                 description: Image URL
+ *               isPrimary:
+ *                 type: boolean
+ *                 description: Whether this is the primary image
+ *           description: Array of cocktail images
  *         image:
  *           type: object
  *           properties:
  *             public_id:
  *               type: string
- *               description: Cloudinary public ID
+ *               description: Cloudinary public ID (primary image)
  *             url:
  *               type: string
- *               description: Image URL
+ *               description: Image URL (primary image)
+ *           description: Primary image for backward compatibility
  *         availableStates:
  *           type: array
  *           items:
@@ -281,10 +297,16 @@ router.get('/:id', async (req, res) => {
  *                 items:
  *                   type: string
  *                 example: ["Lagos", "Abuja"]
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Cocktail image files (multiple images supported)
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: Cocktail image file
+ *                 description: Single cocktail image file (for backward compatibility)
  *     responses:
  *       201:
  *         description: Cocktail created successfully
@@ -306,17 +328,38 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/', authenticateToken, requireAdmin, upload.single('image'), validateCocktail, async (req, res) => {
+router.post('/', authenticateToken, requireAdmin, upload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'image', maxCount: 1 }
+]), validateCocktail, async (req, res) => {
   try {
-    if (!req.file) {
+    const images = req.files?.images || [];
+    const singleImage = req.files?.image || [];
+    
+    // Check if any images were uploaded
+    if (images.length === 0 && singleImage.length === 0) {
       return res.status(400).json({
         error: 'Image required',
-        message: 'Please upload a cocktail image'
+        message: 'Please upload at least one cocktail image'
       });
     }
 
-    // Upload image to Cloudinary
-    const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+    let uploadedImages = [];
+
+    // Handle multiple images
+    if (images.length > 0) {
+      uploadedImages = await uploadMultipleToCloudinary(images);
+    }
+    
+    // Handle single image (for backward compatibility)
+    if (singleImage.length > 0) {
+      const cloudinaryResult = await uploadToCloudinary(singleImage[0].buffer);
+      uploadedImages.push({
+        public_id: cloudinaryResult.public_id,
+        url: cloudinaryResult.secure_url,
+        isPrimary: uploadedImages.length === 0 // Make it primary if no other images
+      });
+    }
 
     const cocktailData = {
       name: req.body.name,
@@ -325,10 +368,7 @@ router.post('/', authenticateToken, requireAdmin, upload.single('image'), valida
       availableStates: Array.isArray(req.body.availableStates) 
         ? req.body.availableStates 
         : JSON.parse(req.body.availableStates),
-      image: {
-        public_id: cloudinaryResult.public_id,
-        url: cloudinaryResult.secure_url
-      }
+      images: uploadedImages
     };
 
     const cocktail = new Cocktail(cocktailData);
@@ -382,10 +422,16 @@ router.post('/', authenticateToken, requireAdmin, upload.single('image'), valida
  *                 type: array
  *                 items:
  *                   type: string
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: New cocktail image files (optional, replaces all images)
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: New cocktail image file (optional)
+ *                 description: New single cocktail image file (optional, for backward compatibility)
  *     responses:
  *       200:
  *         description: Cocktail updated successfully
@@ -409,7 +455,10 @@ router.post('/', authenticateToken, requireAdmin, upload.single('image'), valida
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', authenticateToken, requireAdmin, upload.single('image'), async (req, res) => {
+router.put('/:id', authenticateToken, requireAdmin, upload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'image', maxCount: 1 }
+]), async (req, res) => {
   try {
     const cocktail = await Cocktail.findById(req.params.id);
     if (!cocktail) {
@@ -430,13 +479,29 @@ router.put('/:id', authenticateToken, requireAdmin, upload.single('image'), asyn
         : cocktail.availableStates
     };
 
-    // Handle image update if provided
-    if (req.file) {
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
-      updateData.image = {
-        public_id: cloudinaryResult.public_id,
-        url: cloudinaryResult.secure_url
-      };
+    // Handle image updates if provided
+    const images = req.files?.images || [];
+    const singleImage = req.files?.image || [];
+    
+    if (images.length > 0 || singleImage.length > 0) {
+      let uploadedImages = [];
+
+      // Handle multiple images
+      if (images.length > 0) {
+        uploadedImages = await uploadMultipleToCloudinary(images);
+      }
+      
+      // Handle single image (for backward compatibility)
+      if (singleImage.length > 0) {
+        const cloudinaryResult = await uploadToCloudinary(singleImage[0].buffer);
+        uploadedImages.push({
+          public_id: cloudinaryResult.public_id,
+          url: cloudinaryResult.secure_url,
+          isPrimary: uploadedImages.length === 0 // Make it primary if no other images
+        });
+      }
+
+      updateData.images = uploadedImages;
     }
 
     const updatedCocktail = await Cocktail.findByIdAndUpdate(
@@ -461,6 +526,201 @@ router.put('/:id', authenticateToken, requireAdmin, upload.single('image'), asyn
     res.status(500).json({
       error: 'Failed to update cocktail',
       message: 'Unable to update cocktail at this time'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /catalog/{id}/images:
+ *   post:
+ *     summary: Add images to an existing cocktail (Admin only)
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Cocktail ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Additional cocktail image files
+ *     responses:
+ *       200:
+ *         description: Images added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 cocktail:
+ *                   $ref: '#/components/schemas/Cocktail'
+ *       400:
+ *         description: No images provided
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: Cocktail not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:id/images', authenticateToken, requireAdmin, upload.array('images', 10), async (req, res) => {
+  try {
+    const cocktail = await Cocktail.findById(req.params.id);
+    if (!cocktail) {
+      return res.status(404).json({
+        error: 'Cocktail not found',
+        message: 'The cocktail you are trying to update does not exist'
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        error: 'Images required',
+        message: 'Please upload at least one image'
+      });
+    }
+
+    // Upload new images
+    const newImages = await uploadMultipleToCloudinary(req.files);
+    
+    // Add new images to existing images array
+    const updatedImages = [...(cocktail.images || []), ...newImages];
+    
+    // Update cocktail with new images
+    const updatedCocktail = await Cocktail.findByIdAndUpdate(
+      req.params.id,
+      { images: updatedImages },
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      cocktail: updatedCocktail
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: 'Invalid cocktail ID',
+        message: 'The provided cocktail ID is not valid'
+      });
+    }
+
+    console.error('Add images error:', error);
+    res.status(500).json({
+      error: 'Failed to add images',
+      message: 'Unable to add images at this time'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /catalog/{id}/images/{imageIndex}:
+ *   delete:
+ *     summary: Remove a specific image from cocktail (Admin only)
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Cocktail ID
+ *       - in: path
+ *         name: imageIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: Index of the image to remove
+ *     responses:
+ *       200:
+ *         description: Image removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 cocktail:
+ *                   $ref: '#/components/schemas/Cocktail'
+ *       400:
+ *         description: Invalid image index
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: Cocktail not found
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/:id/images/:imageIndex', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const cocktail = await Cocktail.findById(req.params.id);
+    if (!cocktail) {
+      return res.status(404).json({
+        error: 'Cocktail not found',
+        message: 'The cocktail you are trying to update does not exist'
+      });
+    }
+
+    const imageIndex = parseInt(req.params.imageIndex);
+    
+    if (!cocktail.images || imageIndex < 0 || imageIndex >= cocktail.images.length) {
+      return res.status(400).json({
+        error: 'Invalid image index',
+        message: 'The specified image index is not valid'
+      });
+    }
+
+    // Remove image at specified index
+    cocktail.images.splice(imageIndex, 1);
+    
+    // Update cocktail
+    const updatedCocktail = await Cocktail.findByIdAndUpdate(
+      req.params.id,
+      { images: cocktail.images },
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      cocktail: updatedCocktail
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: 'Invalid cocktail ID',
+        message: 'The provided cocktail ID is not valid'
+      });
+    }
+
+    console.error('Remove image error:', error);
+    res.status(500).json({
+      error: 'Failed to remove image',
+      message: 'Unable to remove image at this time'
     });
   }
 });

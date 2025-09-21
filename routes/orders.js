@@ -249,7 +249,7 @@ router.post('/from-cart', authenticateToken, requireCustomer, async (req, res) =
 
     // Get user's cart
     const cart = await Cart.findOne({ user: req.user._id })
-      .populate('items.cocktail', 'name price availableStates');
+      .populate('items.cocktail', 'name price images availableStates');
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({
@@ -329,7 +329,7 @@ router.post('/from-cart', authenticateToken, requireCustomer, async (req, res) =
     });
 
     await order.save();
-    await order.populate('items.cocktail', 'name description image');
+    await order.populate('items.cocktail', 'name description image images');
 
     // Clear cart
     cart.items = [];
@@ -430,7 +430,7 @@ router.post('/', validateOrder, async (req, res) => {
     await order.save();
 
     // Populate cocktail details for response
-    await order.populate('items.cocktail', 'name description image');
+    await order.populate('items.cocktail', 'name description image images');
 
     // Process inventory (reduce stock levels)
     try {
@@ -526,7 +526,7 @@ router.post('/', validateOrder, async (req, res) => {
 router.get('/:orderNumber', async (req, res) => {
   try {
     const order = await Order.findOne({ orderNumber: req.params.orderNumber })
-      .populate('items.cocktail', 'name description image');
+      .populate('items.cocktail', 'name description image images');
 
     if (!order) {
       return res.status(404).json({
@@ -781,7 +781,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 
     const [orders, total] = await Promise.all([
       Order.find(filter)
-        .populate('items.cocktail', 'name description image')
+        .populate('items.cocktail', 'name description image images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -873,7 +873,7 @@ router.patch('/:id/status', authenticateToken, requireAdmin, validateOrderStatus
     order.fulfillmentStatus = fulfillmentStatus;
     await order.save();
 
-    await order.populate('items.cocktail', 'name description image');
+    await order.populate('items.cocktail', 'name description image images');
 
     res.json({
       success: true,

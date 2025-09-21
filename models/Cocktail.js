@@ -18,7 +18,7 @@ const cocktailSchema = new mongoose.Schema({
     required: [true, 'Price is required'],
     min: [0, 'Price cannot be negative']
   },
-  image: {
+  images: [{
     public_id: {
       type: String,
       required: true
@@ -26,6 +26,19 @@ const cocktailSchema = new mongoose.Schema({
     url: {
       type: String,
       required: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  // Keep image field for backward compatibility (will be the primary image)
+  image: {
+    public_id: {
+      type: String
+    },
+    url: {
+      type: String
     }
   },
   availableStates: [{
@@ -50,5 +63,27 @@ const cocktailSchema = new mongoose.Schema({
 
 // Index for efficient querying by state
 cocktailSchema.index({ availableStates: 1, isActive: 1 });
+
+// Pre-save middleware to handle image compatibility
+cocktailSchema.pre('save', function(next) {
+  // If images array exists and has items, set the primary image
+  if (this.images && this.images.length > 0) {
+    // Find primary image or use first image as primary
+    const primaryImage = this.images.find(img => img.isPrimary) || this.images[0];
+    
+    // Set the image field for backward compatibility
+    this.image = {
+      public_id: primaryImage.public_id,
+      url: primaryImage.url
+    };
+    
+    // Ensure only one primary image
+    this.images.forEach((img, index) => {
+      img.isPrimary = (index === 0 && !this.images.some(i => i.isPrimary)) || img.isPrimary;
+    });
+  }
+  
+  next();
+});
 
 module.exports = mongoose.model('Cocktail', cocktailSchema);

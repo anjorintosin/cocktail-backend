@@ -47,7 +47,41 @@ const uploadToCloudinary = async (buffer) => {
   });
 };
 
+const uploadMultipleToCloudinary = async (files) => {
+  try {
+    const uploadPromises = files.map((file, index) => {
+      return new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'auto',
+            folder: 'cocktail-images',
+            transformation: [
+              { width: 800, height: 600, crop: 'fill', quality: 'auto' }
+            ]
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve({
+                public_id: result.public_id,
+                url: result.secure_url,
+                isPrimary: index === 0 // First image is primary by default
+              });
+            }
+          }
+        ).end(file.buffer);
+      });
+    });
+
+    return await Promise.all(uploadPromises);
+  } catch (error) {
+    throw new Error(`Failed to upload images: ${error.message}`);
+  }
+};
+
 module.exports = {
   upload,
-  uploadToCloudinary
+  uploadToCloudinary,
+  uploadMultipleToCloudinary
 };

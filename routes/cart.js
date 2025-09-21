@@ -50,11 +50,26 @@ const router = express.Router();
  *                                 type: string
  *                               name:
  *                                 type: string
+ *                               description:
+ *                                 type: string
  *                               price:
  *                                 type: number
  *                               image:
  *                                 type: object
+ *                               images:
+ *                                 type: array
+ *                                 items:
+ *                                   type: object
+ *                                   properties:
+ *                                     public_id:
+ *                                       type: string
+ *                                     url:
+ *                                       type: string
+ *                                     isPrimary:
+ *                                       type: boolean
  *                           quantity:
+ *                             type: number
+ *                           price:
  *                             type: number
  *                     totalItems:
  *                       type: number
@@ -68,7 +83,7 @@ const router = express.Router();
 router.get('/', authenticateToken, requireCustomer, async (req, res) => {
   try {
     let cart = await Cart.findOne({ user: req.user._id })
-      .populate('items.cocktail', 'name price image availableStates');
+      .populate('items.cocktail', 'name price description image images availableStates');
 
     if (!cart) {
       // Create empty cart if it doesn't exist
@@ -83,6 +98,10 @@ router.get('/', authenticateToken, requireCustomer, async (req, res) => {
         item.cocktail && item.cocktail.availableStates.includes(userState)
       );
       await cart.save();
+      
+      // Re-populate after filtering
+      cart = await Cart.findById(cart._id)
+        .populate('items.cocktail', 'name price description image images availableStates');
     }
 
     res.json({
@@ -183,16 +202,19 @@ router.post('/', authenticateToken, requireCustomer, [
       }
     } else {
       // Add new item
-      cart.items.push({ cocktail: cocktailId, quantity });
+      cart.items.push({ cocktail: cocktailId, quantity, price: cocktail.price });
     }
 
     await cart.save();
-    await cart.populate('items.cocktail', 'name price image');
+    
+    // Get fresh cart with populated data
+    const populatedCart = await Cart.findById(cart._id)
+      .populate('items.cocktail', 'name price description image images');
 
     res.json({
       success: true,
       message: 'Item added to cart successfully',
-      cart
+      cart: populatedCart
     });
   } catch (error) {
     console.error('Add to cart error:', error);
@@ -277,18 +299,64 @@ router.put('/:cocktailId', authenticateToken, requireCustomer, [
 
     cart.items[itemIndex].quantity = quantity;
     await cart.save();
-    await cart.populate('items.cocktail', 'name price image');
+    
+    // Get fresh cart with populated data
+    const populatedCart = await Cart.findById(cart._id)
+      .populate('items.cocktail', 'name price description image images');
 
     res.json({
       success: true,
       message: 'Cart item updated successfully',
-      cart
+      cart: populatedCart
     });
   } catch (error) {
     console.error('Update cart item error:', error);
     res.status(500).json({
       error: 'Failed to update cart item',
       message: 'Unable to update cart item at this time'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /cart/clear:
+ *   delete:
+ *     summary: Clear entire cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cart cleared successfully
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.delete('/clear', authenticateToken, requireCustomer, async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ user: req.user._id });
+    if (!cart) {
+      return res.status(404).json({
+        error: 'Cart not found',
+        message: 'No cart found for this user'
+      });
+    }
+
+    cart.items = [];
+    await cart.save();
+
+    res.json({
+      success: true,
+      message: 'Cart cleared successfully',
+      cart
+    });
+  } catch (error) {
+    console.error('Clear cart error:', error);
+    res.status(500).json({
+      error: 'Failed to clear cart',
+      message: 'Unable to clear cart at this time'
     });
   }
 });
@@ -343,61 +411,21 @@ router.delete('/:cocktailId', authenticateToken, requireCustomer, async (req, re
     }
 
     await cart.save();
-    await cart.populate('items.cocktail', 'name price image');
+    
+    // Get fresh cart with populated data
+    const populatedCart = await Cart.findById(cart._id)
+      .populate('items.cocktail', 'name price description image images');
 
     res.json({
       success: true,
       message: 'Item removed from cart successfully',
-      cart
+      cart: populatedCart
     });
   } catch (error) {
     console.error('Remove from cart error:', error);
     res.status(500).json({
       error: 'Failed to remove item from cart',
       message: 'Unable to remove item from cart at this time'
-    });
-  }
-});
-
-/**
- * @swagger
- * /cart/clear:
- *   delete:
- *     summary: Clear entire cart
- *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Cart cleared successfully
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Internal server error
- */
-router.delete('/clear', authenticateToken, requireCustomer, async (req, res) => {
-  try {
-    const cart = await Cart.findOne({ user: req.user._id });
-    if (!cart) {
-      return res.status(404).json({
-        error: 'Cart not found',
-        message: 'No cart found for this user'
-      });
-    }
-
-    cart.items = [];
-    await cart.save();
-
-    res.json({
-      success: true,
-      message: 'Cart cleared successfully',
-      cart
-    });
-  } catch (error) {
-    console.error('Clear cart error:', error);
-    res.status(500).json({
-      error: 'Failed to clear cart',
-      message: 'Unable to clear cart at this time'
     });
   }
 });
