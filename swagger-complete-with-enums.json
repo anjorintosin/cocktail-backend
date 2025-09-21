@@ -1,0 +1,4083 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Cocktail Ordering System API",
+    "version": "1.0.0",
+    "description": "A complete backend API for a cocktail ordering system with Express.js, Node.js, and MongoDB. Features JWT authentication, Paystack payment integration, and comprehensive admin management.",
+    "contact": {
+      "name": "Clyp AI",
+      "email": "support@example.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT token in the format: Bearer <token>"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error type"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Validation error details"
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Success status"
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "The auto-generated id of the user"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "The user email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ],
+            "description": "The user role",
+            "default": "admin"
+          },
+          "isEmailVerified": {
+            "type": "boolean",
+            "description": "Email verification status",
+            "default": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "User creation timestamp"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "User last update timestamp"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the user is active"
+          }
+        }
+      },
+      "Cocktail": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "price",
+          "availableStates"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "The auto-generated id of the cocktail"
+          },
+          "name": {
+            "type": "string",
+            "description": "The cocktail name",
+            "example": "Nigerian Sunset",
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "description": "The cocktail description",
+            "maxLength": 500
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The cocktail price in NGN",
+            "example": 2500
+          },
+          "availableStates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Abia",
+                "Adamawa",
+                "Akwa Ibom",
+                "Anambra",
+                "Bauchi",
+                "Bayelsa",
+                "Benue",
+                "Borno",
+                "Cross River",
+                "Delta",
+                "Ebonyi",
+                "Edo",
+                "Ekiti",
+                "Enugu",
+                "FCT",
+                "Gombe",
+                "Imo",
+                "Jigawa",
+                "Kaduna",
+                "Kano",
+                "Katsina",
+                "Kebbi",
+                "Kogi",
+                "Kwara",
+                "Lagos",
+                "Nasarawa",
+                "Niger",
+                "Ogun",
+                "Ondo",
+                "Osun",
+                "Oyo",
+                "Plateau",
+                "Rivers",
+                "Sokoto",
+                "Taraba",
+                "Yobe",
+                "Zamfara"
+              ]
+            },
+            "description": "Nigerian states where the cocktail is available",
+            "example": [
+              "Lagos",
+              "FCT",
+              "Rivers"
+            ]
+          },
+          "image": {
+            "type": "object",
+            "properties": {
+              "public_id": {
+                "type": "string",
+                "description": "Cloudinary public ID"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Image URL"
+              }
+            },
+            "description": "Cocktail image information"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the cocktail is active",
+            "default": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "required": [
+          "cocktail",
+          "quantity",
+          "price"
+        ],
+        "properties": {
+          "cocktail": {
+            "type": "string",
+            "description": "Cocktail ID"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Quantity of the cocktail",
+            "example": 2
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Price of the cocktail at time of order",
+            "example": 2500
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "required": [
+          "customer",
+          "items",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "The auto-generated id of the order"
+          },
+          "orderNumber": {
+            "type": "string",
+            "description": "Auto-generated order number",
+            "example": "ORD-000001"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Unique key to prevent duplicate orders"
+          },
+          "customer": {
+            "type": "object",
+            "required": [
+              "name",
+              "phone",
+              "address",
+              "state"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Customer name",
+                "example": "John Doe"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Customer phone",
+                "example": "+2348012345678"
+              },
+              "address": {
+                "type": "string",
+                "description": "Delivery address"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "Lagos",
+                  "FCT",
+                  "Rivers",
+                  "Delta",
+                  "Akwa Ibom",
+                  "Cross River",
+                  "Ogun",
+                  "Ondo",
+                  "Osun",
+                  "Oyo",
+                  "Kaduna",
+                  "Kano",
+                  "Plateau",
+                  "Katsina",
+                  "Jigawa",
+                  "Bauchi",
+                  "Bayelsa",
+                  "Anambra",
+                  "Imo",
+                  "Abia",
+                  "Niger",
+                  "Enugu",
+                  "Ebonyi",
+                  "Gombe",
+                  "Adamawa",
+                  "Taraba",
+                  "Zamfara",
+                  "Edo",
+                  "Benue",
+                  "Kebbi",
+                  "Sokoto",
+                  "Kwara",
+                  "Nasarawa",
+                  "Kogi"
+                ],
+                "description": "Delivery state"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "description": "Customer email (optional)"
+              }
+            },
+            "$ref": "#/components/schemas/Customer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "totalAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Total amount including any fees"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "failed",
+              "refunded"
+            ],
+            "description": "Payment status",
+            "default": "pending"
+          },
+          "fulfillmentStatus": {
+            "type": "string",
+            "enum": [
+              "new",
+              "preparing",
+              "delivered",
+              "cancelled",
+              "cancelled"
+            ],
+            "description": "Order fulfillment status",
+            "default": "new"
+          },
+          "adminNotes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "note": {
+                  "type": "string",
+                  "description": "Admin note content"
+                },
+                "addedBy": {
+                  "type": "string",
+                  "description": "Admin who added the note"
+                },
+                "addedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "When the note was added"
+                }
+              }
+            },
+            "description": "Admin notes for the order"
+          },
+          "estimatedDeliveryTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Estimated delivery time"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional order notes",
+            "maxLength": 500
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "subtotal": {
+            "type": "number",
+            "description": "Subtotal amount"
+          },
+          "paymentReference": {
+            "type": "string",
+            "description": "Payment reference from gateway"
+          }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "required": [
+          "order",
+          "paystackReference",
+          "amount"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "The auto-generated id of the payment"
+          },
+          "order": {
+            "type": "string",
+            "description": "Order ID"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Payment amount in kobo",
+            "example": 500000
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "NGN"
+            ],
+            "description": "Payment currency",
+            "default": "NGN"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "success",
+              "failed",
+              "abandoned"
+            ],
+            "description": "Payment status",
+            "default": "pending"
+          },
+          "paystackReference": {
+            "type": "string",
+            "description": "Paystack payment reference"
+          },
+          "paystackAccessCode": {
+            "type": "string",
+            "description": "Paystack access code for payment"
+          },
+          "paystackUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Paystack payment URL"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional payment metadata"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "gatewayResponse": {
+            "type": "object",
+            "description": "Response from payment gateway"
+          },
+          "webhookData": {
+            "type": "object",
+            "description": "Webhook data from payment gateway"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When payment was completed"
+          },
+          "failureReason": {
+            "type": "string",
+            "description": "Reason for payment failure"
+          }
+        }
+      },
+      "OTP": {
+        "type": "object",
+        "required": [
+          "email",
+          "otp",
+          "purpose"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "OTP ID"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address for OTP"
+          },
+          "otp": {
+            "type": "string",
+            "description": "One-time password",
+            "example": "123456"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "email_verification",
+              "password_reset",
+              "admin_registration"
+            ],
+            "description": "Purpose of the OTP",
+            "default": "email_verification"
+          },
+          "isUsed": {
+            "type": "boolean",
+            "description": "Whether the OTP has been used",
+            "default": false
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "OTP expiration time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InventoryItem": {
+        "type": "object",
+        "required": [
+          "cocktail",
+          "currentStock",
+          "unit"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "Inventory item ID"
+          },
+          "cocktail": {
+            "type": "string",
+            "description": "Associated cocktail ID"
+          },
+          "currentStock": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Current quantity in stock",
+            "example": 25
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measurement",
+            "example": "bottles",
+            "default": "units"
+          },
+          "minimumStock": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum stock level",
+            "example": 10,
+            "default": 5
+          },
+          "maximumStock": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum stock level",
+            "example": 100,
+            "default": 50
+          },
+          "costPerUnit": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per unit in NGN",
+            "example": 1500,
+            "default": 0
+          },
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Supplier name",
+                "example": "Premium Spirits Ltd."
+              },
+              "contact": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Supplier email"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Supplier phone",
+                    "example": "+2348011223344"
+                  }
+                }
+              }
+            },
+            "description": "Supplier information"
+          },
+          "lastRestockDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date of last restock"
+          },
+          "restockHistory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quantity": {
+                  "type": "integer",
+                  "description": "Quantity restocked"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Restock date"
+                },
+                "cost": {
+                  "type": "number",
+                  "description": "Total cost of restock"
+                },
+                "restockedBy": {
+                  "type": "string",
+                  "description": "Admin who performed restock"
+                }
+              }
+            },
+            "description": "History of restocks"
+          },
+          "alertSettings": {
+            "type": "object",
+            "properties": {
+              "alertThreshold": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Critical stock level",
+                "example": 5,
+                "default": 2
+              },
+              "lastAlertSent": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of last alert sent"
+              },
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "daily",
+                  "weekly",
+                  "monthly"
+                ],
+                "description": "Alert frequency",
+                "example": "daily",
+                "default": "immediate"
+              },
+              "adminEmails": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "email"
+                },
+                "description": "Admin emails to send alerts to",
+                "example": [
+                  "admin@example.com"
+                ]
+              }
+            },
+            "description": "Alert configuration"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether inventory tracking is active",
+            "default": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "JWT token"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "EmailValidationRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address to validate",
+            "example": "user@example.com"
+          }
+        }
+      },
+      "OTPVerificationRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "otp"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address"
+          },
+          "otp": {
+            "type": "string",
+            "description": "OTP token received via email",
+            "example": "123456"
+          }
+        }
+      },
+      "Inventory": {
+        "type": "object",
+        "required": [
+          "cocktail",
+          "currentStock",
+          "minimumStock",
+          "maximumStock"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "The auto-generated id of the inventory item"
+          },
+          "cocktail": {
+            "type": "string",
+            "description": "Cocktail ID reference"
+          },
+          "currentStock": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Current stock level"
+          },
+          "minimumStock": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Minimum stock level"
+          },
+          "maximumStock": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Maximum stock level"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "bottles",
+              "liters",
+              "gallons",
+              "pieces",
+              "servings"
+            ],
+            "description": "Stock unit"
+          },
+          "costPerUnit": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per unit"
+          },
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "contact": {
+                "type": "object",
+                "properties": {
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "lastRestocked": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restockHistory": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "alertSettings": {
+            "type": "object",
+            "properties": {
+              "isEnabled": {
+                "type": "boolean"
+              },
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "daily",
+                  "weekly",
+                  "monthly"
+                ]
+              },
+              "alertThreshold": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "stockStatus": {
+            "type": "string",
+            "enum": [
+              "sufficient",
+              "low",
+              "critical",
+              "out_of_stock"
+            ]
+          },
+          "daysSinceLastRestock": {
+            "type": "number"
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "address",
+          "state"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Customer name"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 15,
+            "description": "Customer phone number"
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Customer address"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "Abia",
+              "Adamawa",
+              "Akwa Ibom",
+              "Anambra",
+              "Bauchi",
+              "Bayelsa",
+              "Benue",
+              "Borno",
+              "Cross River",
+              "Delta",
+              "Ebonyi",
+              "Edo",
+              "Ekiti",
+              "Enugu",
+              "FCT",
+              "Gombe",
+              "Imo",
+              "Jigawa",
+              "Kaduna",
+              "Kano",
+              "Katsina",
+              "Kebbi",
+              "Kogi",
+              "Kwara",
+              "Lagos",
+              "Nasarawa",
+              "Niger",
+              "Ogun",
+              "Ondo",
+              "Osun",
+              "Oyo",
+              "Plateau",
+              "Rivers",
+              "Sokoto",
+              "Taraba",
+              "Yobe",
+              "Zamfara"
+            ],
+            "description": "Customer state"
+          }
+        }
+      },
+      "PaymentRequest": {
+        "type": "object",
+        "required": [
+          "orderId",
+          "email"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "Order ID to pay for"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Customer email for payment"
+          },
+          "callbackUrl": {
+            "type": "string",
+            "description": "Callback URL for payment completion"
+          }
+        }
+      },
+      "OrderTracking": {
+        "type": "object",
+        "properties": {
+          "orderNumber": {
+            "type": "string",
+            "description": "Order number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "preparing",
+              "delivered",
+              "cancelled"
+            ],
+            "description": "Current order status"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "failed",
+              "refunded"
+            ],
+            "description": "Payment status"
+          },
+          "estimatedDelivery": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Estimated delivery time"
+          },
+          "orderProgress": {
+            "type": "object",
+            "properties": {
+              "placed": {
+                "type": "boolean",
+                "description": "Order has been placed"
+              },
+              "confirmed": {
+                "type": "boolean",
+                "description": "Order has been confirmed"
+              },
+              "preparing": {
+                "type": "boolean",
+                "description": "Order is being prepared"
+              },
+              "delivered": {
+                "type": "boolean",
+                "description": "Order has been delivered"
+              }
+            }
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Admin user authentication endpoints"
+    },
+    {
+      "name": "Catalog",
+      "description": "Cocktail catalog management. Public endpoints for browsing, admin endpoints for CRUD operations."
+    },
+    {
+      "name": "Orders",
+      "description": "Order management. Public endpoints for creating orders, admin endpoints for management."
+    },
+    {
+      "name": "Payments",
+      "description": "Payment processing with Paystack integration. Public endpoints for payment flow, admin endpoints for monitoring."
+    },
+    {
+      "name": "Admin",
+      "description": "Admin dashboard and management endpoints. Requires authentication."
+    },
+    {
+      "name": "Order Tracking",
+      "description": "Order tracking endpoints for customers to monitor their orders. Public endpoints."
+    },
+    {
+      "name": "Email Validation",
+      "description": "Email validation using Gmail SMTP with OTP verification. Public endpoints."
+    },
+    {
+      "name": "Inventory Management",
+      "description": "Inventory management with low stock alerts and email notifications. Admin only."
+    }
+  ],
+  "paths": {
+    "/admin/dashboard": {
+      "get": {
+        "summary": "Get admin dashboard statistics (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "statistics": {
+                      "type": "object",
+                      "properties": {
+                        "totalOrders": {
+                          "type": "integer",
+                          "description": "Total number of orders"
+                        },
+                        "pendingOrders": {
+                          "type": "integer",
+                          "description": "Number of pending orders"
+                        },
+                        "paidOrders": {
+                          "type": "integer",
+                          "description": "Number of paid orders"
+                        },
+                        "totalRevenue": {
+                          "type": "number",
+                          "description": "Total revenue in NGN"
+                        },
+                        "totalCocktails": {
+                          "type": "integer",
+                          "description": "Total number of cocktails"
+                        },
+                        "activeCocktails": {
+                          "type": "integer",
+                          "description": "Number of active cocktails"
+                        },
+                        "ordersByState": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "recentOrders": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "description": "Recent order details"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/admin/orders": {
+      "get": {
+        "summary": "Get all orders with advanced filtering (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by customer state"
+          },
+          {
+            "in": "query",
+            "name": "paymentStatus",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "failed",
+                "refunded"
+              ]
+            },
+            "description": "Filter by payment status"
+          },
+          {
+            "in": "query",
+            "name": "fulfillmentStatus",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "preparing",
+                "delivered",
+                "cancelled"
+              ]
+            },
+            "description": "Filter by fulfillment status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter orders from this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter orders until this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by order number or customer name"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of orders to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/admin/cocktails": {
+      "get": {
+        "summary": "Get all cocktails with filtering (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by available state"
+          },
+          {
+            "in": "query",
+            "name": "isActive",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filter by active status"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by cocktail name or description"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of cocktails to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cocktails retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "cocktails": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Cocktail"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/admin/payments": {
+      "get": {
+        "summary": "Get all payments with filtering (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "success",
+                "failed",
+                "abandoned"
+              ]
+            },
+            "description": "Filter by payment status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter payments from this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter payments until this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of payments to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payments retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Payment"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/admin/orders/{id}/status": {
+      "patch": {
+        "summary": "Update order status with email notifications (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Order ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fulfillmentStatus"
+                ],
+                "properties": {
+                  "fulfillmentStatus": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "preparing",
+                      "in_route",
+                      "delivered",
+                      "cancelled"
+                    ],
+                    "description": "New fulfillment status"
+                  },
+                  "adminNote": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Admin note for the status update"
+                  },
+                  "sendEmailNotification": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to send email notification to customer"
+                  },
+                  "estimatedDeliveryTime": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Estimated delivery time (optional)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order status updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "emailSent": {
+                      "type": "boolean",
+                      "description": "Whether email notification was sent"
+                    },
+                    "statusUpdate": {
+                      "type": "object",
+                      "properties": {
+                        "previousStatus": {
+                          "type": "string"
+                        },
+                        "newStatus": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/admin/orders/{id}/track": {
+      "get": {
+        "summary": "Get detailed order tracking information (Admin only)",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Order ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order tracking information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "trackingInfo": {
+                      "type": "object",
+                      "properties": {
+                        "orderNumber": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "paymentStatus": {
+                          "type": "string"
+                        },
+                        "timeline": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "adminNotes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "estimatedDelivery": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new admin user",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "admin@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "example": "password123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or user already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login admin user",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "admin@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "password123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get current user profile",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "summary": "Get cocktails by state (Public endpoint)",
+        "tags": [
+          "Catalog"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Abia",
+                "Adamawa",
+                "Akwa Ibom",
+                "Anambra",
+                "Bauchi",
+                "Bayelsa",
+                "Benue",
+                "Borno",
+                "Cross River",
+                "Delta",
+                "Ebonyi",
+                "Edo",
+                "Ekiti",
+                "Enugu",
+                "FCT",
+                "Gombe",
+                "Imo",
+                "Jigawa",
+                "Kaduna",
+                "Kano",
+                "Katsina",
+                "Kebbi",
+                "Kogi",
+                "Kwara",
+                "Lagos",
+                "Nasarawa",
+                "Niger",
+                "Ogun",
+                "Ondo",
+                "Osun",
+                "Oyo",
+                "Plateau",
+                "Rivers",
+                "Sokoto",
+                "Taraba",
+                "Yobe",
+                "Zamfara"
+              ]
+            },
+            "description": "Nigerian state to filter cocktails"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of cocktails to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cocktails retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "cocktails": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Cocktail"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid state parameter"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new cocktail (Admin only)",
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "description",
+                  "price",
+                  "availableStates",
+                  "image"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "example": "Mojito"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Refreshing mint and lime cocktail"
+                  },
+                  "price": {
+                    "type": "number",
+                    "minimum": 0,
+                    "example": 2500
+                  },
+                  "availableStates": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Lagos",
+                      "Abuja"
+                    ]
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Cocktail image file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cocktail created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "cocktail": {
+                      "$ref": "#/components/schemas/Cocktail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or missing image"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/catalog/{id}": {
+      "get": {
+        "summary": "Get a specific cocktail by ID (Public endpoint)",
+        "tags": [
+          "Catalog"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cocktail ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cocktail retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "cocktail": {
+                      "$ref": "#/components/schemas/Cocktail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cocktail not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a cocktail (Admin only)",
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cocktail ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "price": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "availableStates": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "New cocktail image file (optional)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cocktail updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "cocktail": {
+                      "$ref": "#/components/schemas/Cocktail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "404": {
+            "description": "Cocktail not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a cocktail (Admin only)",
+        "tags": [
+          "Catalog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cocktail ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cocktail deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "404": {
+            "description": "Cocktail not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/email/send-otp": {
+      "post": {
+        "summary": "Send OTP for email validation (Public endpoint)",
+        "tags": [
+          "Email Validation"
+        ],
+        "description": "Send a One-Time Password (OTP) to the specified email address for validation.\nThe OTP will be sent via Gmail SMTP and expires in 10 minutes.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "user@example.com"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "email_verification",
+                      "password_reset",
+                      "admin_registration"
+                    ],
+                    "default": "email_verification",
+                    "description": "Purpose of the OTP"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "string",
+                      "description": "OTP expiration time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or email already verified"
+          },
+          "500": {
+            "description": "Internal server error or email sending failed"
+          }
+        }
+      }
+    },
+    "/email/verify-otp": {
+      "post": {
+        "summary": "Verify OTP for email validation (Public endpoint)",
+        "tags": [
+          "Email Validation"
+        ],
+        "description": "Verify the OTP token sent to the email address.\nIf valid, the email will be marked as verified.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "otp"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "user@example.com"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "example": "123456",
+                    "description": "OTP token received via email"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "email_verification",
+                      "password_reset",
+                      "admin_registration"
+                    ],
+                    "default": "email_verification",
+                    "description": "Purpose of the OTP"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verified successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid OTP or validation error"
+          },
+          "404": {
+            "description": "OTP not found or expired"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/email/resend-otp": {
+      "post": {
+        "summary": "Resend OTP for email validation (Public endpoint)",
+        "tags": [
+          "Email Validation"
+        ],
+        "description": "Resend OTP to the specified email address.\nThis will invalidate any existing OTP for the email.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "user@example.com"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "email_verification",
+                      "password_reset",
+                      "admin_registration"
+                    ],
+                    "default": "email_verification"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP resent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/inventory": {
+      "get": {
+        "summary": "Get all inventory items with filtering (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sufficient",
+                "low",
+                "critical",
+                "out_of_stock"
+              ]
+            },
+            "description": "Filter by stock status"
+          },
+          {
+            "in": "query",
+            "name": "lowStock",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filter for low stock items only"
+          },
+          {
+            "in": "query",
+            "name": "criticalStock",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filter for critical stock items only"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of items to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory items retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "inventory": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Inventory"
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalItems": {
+                          "type": "integer"
+                        },
+                        "lowStock": {
+                          "type": "integer"
+                        },
+                        "criticalStock": {
+                          "type": "integer"
+                        },
+                        "outOfStock": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create inventory item for a cocktail (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "cocktail",
+                  "currentStock",
+                  "minimumStock",
+                  "maximumStock"
+                ],
+                "properties": {
+                  "cocktail": {
+                    "type": "string",
+                    "description": "Cocktail ID"
+                  },
+                  "currentStock": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minimumStock": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maximumStock": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "unit": {
+                    "type": "string",
+                    "enum": [
+                      "bottles",
+                      "liters",
+                      "gallons",
+                      "pieces",
+                      "servings"
+                    ]
+                  },
+                  "costPerUnit": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "supplier": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "contact": {
+                        "type": "object",
+                        "properties": {
+                          "phone": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "alertSettings": {
+                    "type": "object",
+                    "properties": {
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "immediate",
+                          "daily",
+                          "weekly",
+                          "monthly"
+                        ]
+                      },
+                      "alertThreshold": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Inventory item created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "inventory": {
+                      "$ref": "#/components/schemas/Inventory"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or cocktail already has inventory"
+          },
+          "404": {
+            "description": "Cocktail not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/inventory/{id}/restock": {
+      "post": {
+        "summary": "Restock inventory item (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Inventory item ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "quantity"
+                ],
+                "properties": {
+                  "quantity": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "Quantity to add to stock"
+                  },
+                  "cost": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Total cost of restock"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Restock notes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inventory restocked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "inventory": {
+                      "$ref": "#/components/schemas/Inventory"
+                    },
+                    "restockInfo": {
+                      "type": "object",
+                      "properties": {
+                        "quantityAdded": {
+                          "type": "number"
+                        },
+                        "previousStock": {
+                          "type": "number"
+                        },
+                        "newStock": {
+                          "type": "number"
+                        },
+                        "totalCost": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Inventory item not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/inventory/{id}": {
+      "put": {
+        "summary": "Update inventory item settings (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Inventory item ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "minimumStock": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maximumStock": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "unit": {
+                    "type": "string",
+                    "enum": [
+                      "bottles",
+                      "liters",
+                      "gallons",
+                      "pieces",
+                      "servings"
+                    ]
+                  },
+                  "costPerUnit": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "supplier": {
+                    "type": "object"
+                  },
+                  "alertSettings": {
+                    "type": "object",
+                    "properties": {
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "immediate",
+                          "daily",
+                          "weekly",
+                          "monthly"
+                        ]
+                      },
+                      "alertThreshold": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Inventory item updated successfully"
+          },
+          "404": {
+            "description": "Inventory item not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/inventory/report": {
+      "get": {
+        "summary": "Generate inventory report (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory report generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "summary": {
+                          "type": "object"
+                        },
+                        "lowStock": {
+                          "type": "array"
+                        },
+                        "criticalStock": {
+                          "type": "array"
+                        },
+                        "outOfStock": {
+                          "type": "array"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/inventory/check-alerts": {
+      "post": {
+        "summary": "Manually trigger inventory level check (Admin only)",
+        "tags": [
+          "Inventory Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory level check completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "alertsSent": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "summary": "Create a new order (Guest ordering - No signup required)",
+        "tags": [
+          "Orders"
+        ],
+        "description": "This endpoint allows guests to place orders without creating an account.\nSimply provide your contact details, select cocktails, and place your order.\nYou'll receive an order number that you can use to track your order.\n\n**Order Flow:**\n1. Browse cocktails: `GET /catalog?state=Lagos`\n2. Create order: `POST /orders` (this endpoint)\n3. Track order: `GET /orders/{orderNumber}`\n4. Initialize payment: `POST /payments/initialize`\n5. Verify payment: `GET /payments/verify/{reference}`\n\n**Idempotency Key:** Use a unique string to prevent duplicate orders.\nYou can use: `order-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "customer",
+                  "items",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "customer": {
+                    "$ref": "#/components/schemas/Customer"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/OrderItem"
+                    },
+                    "description": "Array of cocktails to order"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "example": "order-12345-unique-key",
+                    "description": "Unique key to prevent duplicate orders"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Please call before delivery",
+                    "description": "Additional delivery instructions"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "orderNumber": {
+                      "type": "string",
+                      "description": "Use this number to track your order"
+                    },
+                    "trackingUrl": {
+                      "type": "string",
+                      "description": "Direct URL to track this order"
+                    },
+                    "nextSteps": {
+                      "type": "object",
+                      "properties": {
+                        "payment": {
+                          "type": "string",
+                          "description": "Next step - initialize payment"
+                        },
+                        "tracking": {
+                          "type": "string",
+                          "description": "How to track your order"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or duplicate order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "get": {
+        "summary": "Get all orders with filtering (Admin only)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Abia",
+                "Adamawa",
+                "Akwa Ibom",
+                "Anambra",
+                "Bauchi",
+                "Bayelsa",
+                "Benue",
+                "Borno",
+                "Cross River",
+                "Delta",
+                "Ebonyi",
+                "Edo",
+                "Ekiti",
+                "Enugu",
+                "FCT",
+                "Gombe",
+                "Imo",
+                "Jigawa",
+                "Kaduna",
+                "Kano",
+                "Katsina",
+                "Kebbi",
+                "Kogi",
+                "Kwara",
+                "Lagos",
+                "Nasarawa",
+                "Niger",
+                "Ogun",
+                "Ondo",
+                "Osun",
+                "Oyo",
+                "Plateau",
+                "Rivers",
+                "Sokoto",
+                "Taraba",
+                "Yobe",
+                "Zamfara"
+              ]
+            },
+            "description": "Filter by customer state"
+          },
+          {
+            "in": "query",
+            "name": "paymentStatus",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "failed",
+                "refunded"
+              ]
+            },
+            "description": "Filter by payment status"
+          },
+          {
+            "in": "query",
+            "name": "fulfillmentStatus",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "preparing",
+                "delivered",
+                "cancelled"
+              ]
+            },
+            "description": "Filter by fulfillment status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter orders from this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter orders until this date (YYYY-MM-DD)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of orders to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/orders/{orderNumber}": {
+      "get": {
+        "summary": "Track order by order number (Public endpoint)",
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderNumber",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Order number (e.g., ORD-000001)",
+            "example": "ORD-000001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "trackingInfo": {
+                      "type": "object",
+                      "properties": {
+                        "orderNumber": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "new",
+                            "preparing",
+                            "delivered",
+                            "cancelled"
+                          ]
+                        },
+                        "paymentStatus": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "paid",
+                            "failed",
+                            "refunded"
+                          ]
+                        },
+                        "estimatedDelivery": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "Estimated delivery time"
+                        },
+                        "orderProgress": {
+                          "type": "object",
+                          "properties": {
+                            "placed": {
+                              "type": "boolean",
+                              "description": "Order has been placed"
+                            },
+                            "confirmed": {
+                              "type": "boolean",
+                              "description": "Order has been confirmed"
+                            },
+                            "preparing": {
+                              "type": "boolean",
+                              "description": "Order is being prepared"
+                            },
+                            "delivered": {
+                              "type": "boolean",
+                              "description": "Order has been delivered"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/orders/track/phone/{phone}": {
+      "get": {
+        "summary": "Track orders by phone number (Public endpoint)",
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phone",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Customer phone number",
+            "example": "+2348012345678"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "customerInfo": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "phone": {
+                          "type": "string"
+                        },
+                        "totalOrders": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No orders found for this phone number"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/orders/{id}/status": {
+      "patch": {
+        "summary": "Update order fulfillment status (Admin only)",
+        "tags": [
+          "Orders"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Order ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fulfillmentStatus"
+                ],
+                "properties": {
+                  "fulfillmentStatus": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "preparing",
+                      "delivered",
+                      "cancelled"
+                    ],
+                    "description": "New fulfillment status"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order status updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "order": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/payments/initialize": {
+      "post": {
+        "summary": "Initialize payment for an order (Public endpoint)",
+        "tags": [
+          "Payments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orderId",
+                  "email"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "description": "Order ID to pay for"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Customer email for payment"
+                  },
+                  "callbackUrl": {
+                    "type": "string",
+                    "description": "Callback URL for payment completion"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment initialized successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "authorizationUrl": {
+                          "type": "string",
+                          "description": "URL to redirect customer for payment"
+                        },
+                        "accessCode": {
+                          "type": "string",
+                          "description": "Payment access code"
+                        },
+                        "reference": {
+                          "type": "string",
+                          "description": "Payment reference"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid order or order already paid"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/payments/verify/{reference}": {
+      "get": {
+        "summary": "Verify payment status (Public endpoint)",
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "reference",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Payment reference from Paystack"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment verification successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "success",
+                            "failed",
+                            "abandoned"
+                          ]
+                        },
+                        "amount": {
+                          "type": "number"
+                        },
+                        "reference": {
+                          "type": "string"
+                        },
+                        "paidAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "order": {
+                          "type": "object",
+                          "description": "Associated order details"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reference or payment verification failed"
+          },
+          "404": {
+            "description": "Payment not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/payments/webhook": {
+      "post": {
+        "summary": "Handle Paystack webhook (Internal endpoint)",
+        "tags": [
+          "Payments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed successfully"
+          },
+          "400": {
+            "description": "Invalid webhook signature"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/payments": {
+      "get": {
+        "summary": "Get all payments with filtering (Admin only)",
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "success",
+                "failed",
+                "abandoned"
+              ]
+            },
+            "description": "Filter by payment status"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Number of payments to return"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payments retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "payments": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Payment"
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "pages": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Admin access required"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/tracking/order/{orderNumber}": {
+      "get": {
+        "summary": "Track order status and progress (Public endpoint)",
+        "tags": [
+          "Order Tracking"
+        ],
+        "description": "Get detailed tracking information for an order including status, progress, and estimated delivery time.\nThis endpoint is perfect for customers to check their order status.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orderNumber",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Order number (e.g., ORD-000001)",
+            "example": "ORD-000001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order tracking information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "orderNumber": {
+                      "type": "string"
+                    },
+                    "customer": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "phone": {
+                          "type": "string"
+                        },
+                        "address": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "tracking": {
+                      "$ref": "#/components/schemas/OrderTracking"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "cocktail": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "image": {
+                                "type": "object"
+                              }
+                            }
+                          },
+                          "quantity": {
+                            "type": "integer"
+                          },
+                          "price": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "totalAmount": {
+                      "type": "number"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/tracking/customer/{phone}": {
+      "get": {
+        "summary": "Get all orders for a customer by phone number (Public endpoint)",
+        "tags": [
+          "Order Tracking"
+        ],
+        "description": "Retrieve all orders placed by a customer using their phone number.\nThis is useful for customers who want to see their order history.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phone",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Customer phone number",
+            "example": "+2348012345678"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            },
+            "description": "Number of orders to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "customer": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "phone": {
+                          "type": "string"
+                        },
+                        "totalOrders": {
+                          "type": "integer"
+                        },
+                        "totalSpent": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "orderNumber": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "paymentStatus": {
+                            "type": "string"
+                          },
+                          "totalAmount": {
+                            "type": "number"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No orders found for this phone number"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  }
+}
