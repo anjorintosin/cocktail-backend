@@ -2,7 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const Order = require('../models/Order');
 const Cocktail = require('../models/Cocktail');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const Cart = require('../models/Cart');
+const { authenticateToken, requireAdmin, requireCustomer } = require('../middleware/auth');
 const { validateOrder, validateOrderStatusUpdate } = require('../middleware/validation');
 const inventoryAlertService = require('../services/inventoryAlertService');
 
@@ -197,6 +198,170 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
+/**
+ * @swagger
+ * /orders/from-cart:
+ *   post:
+ *     summary: Create order from user's cart (Authenticated users)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deliveryAddress:
+ *                 type: object
+ *                 properties:
+ *                   street:
+ *                     type: string
+ *                     example: "123 Victoria Island"
+ *                   city:
+ *                     type: string
+ *                     example: "Lagos"
+ *                   state:
+ *                     type: string
+ *                     enum: [Abia, Adamawa, Akwa Ibom, Anambra, Bauchi, Bayelsa, Benue, Borno, Cross River, Delta, Ebonyi, Edo, Ekiti, Enugu, FCT, Gombe, Imo, Jigawa, Kaduna, Kano, Katsina, Kebbi, Kogi, Kwara, Lagos, Nasarawa, Niger, Ogun, Ondo, Osun, Oyo, Plateau, Rivers, Sokoto, Taraba, Yobe, Zamfara]
+ *                     example: "Lagos"
+ *                   postalCode:
+ *                     type: string
+ *                     example: "101241"
+ *               notes:
+ *                 type: string
+ *                 maxLength: 500
+ *                 example: "Please call before delivery"
+ *     responses:
+ *       201:
+ *         description: Order created successfully from cart
+ *       400:
+ *         description: Validation error or empty cart
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/from-cart', authenticateToken, requireCustomer, async (req, res) => {
+  try {
+    const { deliveryAddress, notes } = req.body;
+
+    // Get user's cart
+    const cart = await Cart.findOne({ user: req.user._id })
+      .populate('items.cocktail', 'name price availableStates');
+
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({
+        error: 'Empty cart',
+        message: 'Your cart is empty'
+      });
+    }
+
+    // Use user's profile address if delivery address not provided
+    const address = deliveryAddress || req.user.address;
+    if (!address || !address.street || !address.city || !address.state) {
+      return res.status(400).json({
+        error: 'Missing delivery address',
+        message: 'Please provide a complete delivery address'
+      });
+    }
+
+    // Validate cocktails are still available
+    const cocktailIds = cart.items.map(item => item.cocktail._id);
+    const cocktails = await Cocktail.find({ 
+      _id: { $in: cocktailIds }, 
+      isActive: true 
+    });
+
+    if (cocktails.length !== cocktailIds.length) {
+      return res.status(400).json({
+        error: 'Invalid cocktails',
+        message: 'One or more cocktails are no longer available'
+      });
+    }
+
+    // Check availability in delivery state
+    for (const item of cart.items) {
+      const cocktail = cocktails.find(c => c._id.toString() === item.cocktail._id.toString());
+      if (!cocktail.availableStates.includes(address.state)) {
+        return res.status(400).json({
+          error: 'Cocktail not available',
+          message: `${cocktail.name} is not available in ${address.state}`
+        });
+      }
+    }
+
+    // Calculate totals
+    let subtotal = 0;
+    const orderItems = [];
+
+    for (const item of cart.items) {
+      const cocktail = cocktails.find(c => c._id.toString() === item.cocktail._id.toString());
+      const itemTotal = cocktail.price * item.quantity;
+      subtotal += itemTotal;
+
+      orderItems.push({
+        cocktail: cocktail._id,
+        quantity: item.quantity,
+        price: cocktail.price
+      });
+    }
+
+    const totalAmount = subtotal;
+    const idempotencyKey = `user-${req.user._id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create order
+    const order = new Order({
+      user: req.user._id,
+      idempotencyKey,
+      customer: {
+        name: `${req.user.firstName} ${req.user.lastName}`,
+        phone: req.user.phone || '',
+        address: `${address.street}, ${address.city}, ${address.state}`,
+        state: address.state,
+        email: req.user.email
+      },
+      items: orderItems,
+      subtotal,
+      totalAmount,
+      notes
+    });
+
+    await order.save();
+    await order.populate('items.cocktail', 'name description image');
+
+    // Clear cart
+    cart.items = [];
+    await cart.save();
+
+    // Process inventory
+    try {
+      await inventoryAlertService.processOrderInventory(order);
+      console.log(`✅ Inventory processed for order ${order.orderNumber}`);
+    } catch (inventoryError) {
+      console.error('Inventory processing failed:', inventoryError);
+    }
+
+    res.status(201).json({
+      success: true,
+      order,
+      orderNumber: order.orderNumber,
+      trackingUrl: `${process.env.BASE_URL || 'http://localhost:3000'}/orders/${order.orderNumber}`,
+      nextSteps: {
+        payment: `POST ${process.env.BASE_URL || 'http://localhost:3000'}/payments/initialize with orderId: ${order._id}`,
+        tracking: `GET ${process.env.BASE_URL || 'http://localhost:3000'}/orders/${order.orderNumber} to track your order`
+      }
+    });
+  } catch (error) {
+    console.error('Create order from cart error:', error);
+    res.status(500).json({
+      error: 'Failed to create order',
+      message: 'Unable to create order from cart at this time'
+    });
+  }
+});
+
 router.post('/', validateOrder, async (req, res) => {
   try {
     const { customer, items, idempotencyKey, notes } = req.body;

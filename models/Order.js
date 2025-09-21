@@ -23,6 +23,11 @@ const orderSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false // Optional for guest orders
+  },
   idempotencyKey: {
     type: String,
     required: true,
@@ -112,6 +117,7 @@ const orderSchema = new mongoose.Schema({
 // Indexes for efficient querying
 orderSchema.index({ 'customer.state': 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, fulfillmentStatus: 1 });
+orderSchema.index({ user: 1, createdAt: -1 }); // For user order history
 
 // Generate order number before saving
 orderSchema.pre('save', async function(next) {

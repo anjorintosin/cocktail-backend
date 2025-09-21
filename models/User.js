@@ -16,8 +16,38 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin'],
-    default: 'admin'
+    enum: ['admin', 'customer'],
+    default: 'customer'
+  },
+  firstName: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'First name cannot exceed 50 characters']
+  },
+  lastName: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'Last name cannot exceed 50 characters']
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  address: {
+    street: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: {
+      type: String,
+      enum: [
+        'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa',
+        'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo',
+        'Ekiti', 'Enugu', 'FCT', 'Gombe', 'Imo', 'Jigawa',
+        'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara',
+        'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun',
+        'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara'
+      ]
+    },
+    postalCode: { type: String, trim: true }
   },
   isActive: {
     type: Boolean,

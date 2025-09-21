@@ -59,7 +59,19 @@ const requireAdmin = (req, res, next) => {
   }
 };
 
+const requireCustomer = (req, res, next) => {
+  if (req.user && req.user.role === 'customer') {
+    next();
+  } else {
+    res.status(403).json({ 
+      error: 'Access denied', 
+      message: 'Customer access required' 
+    });
+  }
+};
+
 module.exports = {
   authenticateToken,
-  requireAdmin
+  requireAdmin,
+  requireCustomer
 };

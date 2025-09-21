@@ -66,15 +66,19 @@ A complete backend API for a cocktail ordering system built with Express.js, Nod
    NODE_ENV=development
    ```
 
-4. **Seed the database**
-   ```bash
-   npm run seed
-   npm run seed-inventory
-   ```
-
-5. **Start the development server**
+4. **Start the development server** (auto-seeds database)
    ```bash
    npm run dev
+   ```
+   
+   **🌱 Auto-Seeding**: The server automatically seeds the database with sample data if it's empty!
+
+5. **Manual seeding** (optional):
+   ```bash
+   npm run seed          # Admin user and cocktails
+   npm run seed-inventory # Inventory data
+   npm run seed-all      # Everything
+   npm run reset-db      # Clear and reseed
    ```
 
 6. **Access the API**
@@ -219,8 +223,12 @@ cock-tail/
 ### Available Scripts
 
 - `npm start` - Start production server
-- `npm run dev` - Start development server with nodemon
-- `npm run seed` - Seed database with sample data
+- `npm run dev` - Start development server with auto-seeding
+- `npm run seed` - Seed database with admin user and cocktails
+- `npm run seed-inventory` - Seed database with inventory data
+- `npm run seed-all` - Seed everything (admin, cocktails, inventory)
+- `npm run reset-db` - Clear database and reseed everything
+- `npm test` - Run comprehensive API test suite
 
 ### Environment Variables
 
